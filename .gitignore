@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.so
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Streamlit
+.streamlit/
+
+# Databases & logs
+*.sqlite3
+*.db
+*.log
+activity.log
+darkweb_intel.db
+
+# Caches
+.cache/
+*.cache/
+.pytest_cache/
+
+# Editor/IDE
+.vscode/
+.idea/
+*.code-workspace
+
+# OS
+.DS_Store

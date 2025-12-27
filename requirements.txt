@@ -1,0 +1,5 @@
+requests[socks]
+beautifulsoup4
+streamlit
+pandas
+pysocks

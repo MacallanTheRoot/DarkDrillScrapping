@@ -1,0 +1,21 @@
+.
+├── core
+│   ├── database.py
+│   ├── discovery.py
+│   ├── __init__.py
+│   ├── __pycache__
+│   │   ├── database.cpython-313.pyc
+│   │   ├── discovery.cpython-313.pyc
+│   │   ├── __init__.cpython-313.pyc
+│   │   ├── scraper.cpython-313.pyc
+│   │   └── tor_manager.cpython-313.pyc
+│   ├── scraper.py
+│   └── tor_manager.py
+├── darkweb_intel.db
+├── main.py
+├── requirements.txt
+├── tree.txt
+└── ui
+    └── dashboard.py
+
+4 directories, 15 files
