@@ -1,6 +1,7 @@
 import signal
 import sys
 import time # Bekleme için eklendi
+import os
 from core.tor_manager import TorManager
 from core.discovery import DarkWebDiscovery
 from core.scraper import DarkWebScraper
@@ -10,7 +11,8 @@ def main():
     tor = TorManager()
     db = DatabaseManager()
     discovery = DarkWebDiscovery()
-    scraper = DarkWebScraper()
+    webhook_url = os.getenv("DARKDRILL_WEBHOOK_URL", "").strip() or None
+    scraper = DarkWebScraper(webhook_url=webhook_url)
 
     # Ctrl+C yakalama
     signal.signal(signal.SIGINT, lambda s, f: (tor.stop_tor(), sys.exit(0)))
@@ -24,7 +26,7 @@ def main():
 
     print("\n--- Dark Drill Intelligence Tool Başlatıldı ---")
     
-    # İSTEDİĞİN GÜNCELLEME: Örneklerle arama sorgusu
+    # Kullanıcıdan arama sorgusunu al
     query = input("[?] Aramak istediğiniz anahtar kelime (Örnek: database leak, combo list, admin, sql dump): ")
     
     if not query.strip():

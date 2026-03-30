@@ -1,51 +1,116 @@
 import subprocess
 import sys
 import time
+import socket
 from core.logger import setup_custom_logger
 
 # Logger kurulumu
 logger = setup_custom_logger(__name__)
 
 class TorManager:
-    def __init__(self):
+    def __init__(self, host="127.0.0.1", port=9050):
         self.is_linux = sys.platform.startswith('linux')
+        self.is_windows = sys.platform.startswith('win')
+        self.host = host
+        self.port = port
+
+    def _is_tor_ready(self):
+        """Tor SOCKS portu erişilebilir mi kontrol eder."""
+        try:
+            with socket.create_connection((self.host, self.port), timeout=1.5):
+                return True
+        except OSError:
+            return False
+
+    def _wait_until_ready(self, timeout_seconds=20):
+        """Tor servisinin SOCKS portundan hazır olmasını bekler."""
+        for i in range(1, timeout_seconds + 1):
+            if self._is_tor_ready():
+                logger.info(f"Tor başarıyla hazır ({i}. saniyede).")
+                return True
+            time.sleep(1)
+        return False
+
+    def _run_command(self, cmd):
+        """Komutu güvenli şekilde çalıştırır; hata durumunda False döner."""
+        try:
+            subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            return True
+        except Exception:
+            return False
+
+    def _start_linux(self):
+        # sudo olmayan ortamlarda önce doğrudan service, sonra sudo deneriz.
+        return self._run_command(['service', 'tor', 'start']) or self._run_command(['sudo', 'service', 'tor', 'start'])
+
+    def _stop_linux(self):
+        return self._run_command(['service', 'tor', 'stop']) or self._run_command(['sudo', 'service', 'tor', 'stop'])
+
+    def _start_windows(self):
+        # Farklı kurulumlarda servis adları değişebildiği için aday isimlerle denenir.
+        candidates = [
+            ['sc', 'start', 'tor'],
+            ['sc', 'start', 'Tor'],
+            ['sc', 'start', '"Tor Win32 Service"'],
+            ['net', 'start', 'tor'],
+            ['net', 'start', 'Tor'],
+        ]
+        for cmd in candidates:
+            if self._run_command(cmd):
+                return True
+        return False
+
+    def _stop_windows(self):
+        candidates = [
+            ['sc', 'stop', 'tor'],
+            ['sc', 'stop', 'Tor'],
+            ['sc', 'stop', '"Tor Win32 Service"'],
+            ['net', 'stop', 'tor'],
+            ['net', 'stop', 'Tor'],
+        ]
+        for cmd in candidates:
+            if self._run_command(cmd):
+                return True
+        return False
 
     def start_tor(self):
         """Tor servisini başlatır ve bağlantının kurulmasını bekler."""
-        if not self.is_linux:
-            logger.error("Otomatik Tor başlatma sadece Linux sistemlerde desteklenmektedir.")
-            return False
+        if self._is_tor_ready():
+            logger.info("Tor servisi zaten aktif (SOCKS portu erişilebilir).")
+            return True
 
         logger.info("Tor ağı başlatılıyor...")
-        try:
-            # Tor'un zaten çalışıp çalışmadığını kontrol et
-            check = subprocess.run(['pgrep', '-x', 'tor'], capture_output=True)
-            if check.returncode == 0:
-                logger.info("Tor servisi zaten aktif.")
-                return True
+        if self.is_linux:
+            self._start_linux()
+        elif self.is_windows:
+            self._start_windows()
+        else:
+            logger.warning("Bu işletim sistemi için otomatik servis başlatma sınırlı olabilir, sadece port kontrolü yapılacak.")
 
-            # Tor servisini başlat
-            subprocess.run(['sudo', 'service', 'tor', 'start'], check=True)
-            
-            # Servisin ayağa kalkması için kontrol döngüsü
-            for i in range(1, 11):
-                time.sleep(1)
-                check = subprocess.run(['pgrep', '-x', 'tor'], capture_output=True)
-                if check.returncode == 0:
-                    logger.info(f"Tor başarıyla başlatıldı ({i}. saniyede).")
-                    return True
-            
-            logger.error("Tor başlatıldı ancak servis yanıt vermiyor.")
-            return False
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Tor başlatılamadı! Sudo yetkisi gerekebilir: {str(e)}")
-            return False
+        if self._wait_until_ready(timeout_seconds=20):
+            return True
+
+        logger.error("Tor başlatılamadı veya SOCKS portu yanıt vermiyor (127.0.0.1:9050).")
+        return False
 
     def stop_tor(self):
         """Tor servisini güvenli bir şekilde kapatır."""
         logger.info("Tor ağı yavaşça kapatılıyor (Graceful Shutdown)...")
-        try:
-            subprocess.run(['sudo', 'service', 'tor', 'stop'], check=True)
-            logger.info("Tor servisi başarıyla durduruldu.")
-        except Exception as e:
-            logger.error(f"Tor kapatılırken hata oluştu: {str(e)}")
+
+        if self.is_linux:
+            self._stop_linux()
+        elif self.is_windows:
+            self._stop_windows()
+        else:
+            logger.warning("Bu işletim sistemi için otomatik servis durdurma sınırlı olabilir.")
+
+        # Durdurma denemesinden sonra port kapanışını kontrol eder.
+        for _ in range(10):
+            if not self._is_tor_ready():
+                logger.info("Tor servisi durduruldu veya SOCKS portu kapandı.")
+                return True
+            time.sleep(1)
+
+        # Servis dışardan yönetiliyorsa port açık kalabilir; bunu hata yerine bilgi olarak bırakıyoruz.
+        logger.warning("Tor portu hala açık görünüyor. Servis dış bir süreç tarafından yönetiliyor olabilir.")
+        return False
